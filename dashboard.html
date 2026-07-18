@@ -1,0 +1,374 @@
+<title>AI 주식 투자 프로그램 — Phase 1 상태</title>
+<style>
+  :root {
+    --ground: #f6f7f9;
+    --surface: #ffffff;
+    --surface-2: #fbfcfd;
+    --ink: #19212e;
+    --muted: #5c6773;
+    --faint: #8b96a4;
+    --hair: #e4e8ee;
+    --hair-strong: #d3d9e2;
+    --accent: #b3801d;
+    --accent-soft: #f4ead2;
+    --ok: #157d64;
+    --ok-soft: #dcefe8;
+    --pend: #b0731a;
+    --pend-soft: #f6ebd6;
+    --err: #c0433c;
+    --err-soft: #f8e0de;
+    --up: #d23c46;      /* 한국식: 상승 = 빨강 */
+    --down: #2c6bd0;    /* 한국식: 하락 = 파랑 */
+    --radius: 12px;
+    --mono: ui-monospace, "Cascadia Code", "Consolas", "SFMono-Regular", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0e131a;
+      --surface: #151c26;
+      --surface-2: #111721;
+      --ink: #e9edf3;
+      --muted: #97a3b2;
+      --faint: #6d7a89;
+      --hair: #26303c;
+      --hair-strong: #33404f;
+      --accent: #e0aa4c;
+      --accent-soft: #2c2312;
+      --ok: #4fc0a1;
+      --ok-soft: #12271f;
+      --pend: #e0a94a;
+      --pend-soft: #2a2311;
+      --err: #e8756c;
+      --err-soft: #2c1615;
+      --up: #ef5761;
+      --down: #5a92ec;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0e131a; --surface: #151c26; --surface-2: #111721; --ink: #e9edf3;
+    --muted: #97a3b2; --faint: #6d7a89; --hair: #26303c; --hair-strong: #33404f;
+    --accent: #e0aa4c; --accent-soft: #2c2312; --ok: #4fc0a1; --ok-soft: #12271f;
+    --pend: #e0a94a; --pend-soft: #2a2311; --err: #e8756c; --err-soft: #2c1615;
+    --up: #ef5761; --down: #5a92ec;
+  }
+  :root[data-theme="light"] {
+    --ground: #f6f7f9; --surface: #ffffff; --surface-2: #fbfcfd; --ink: #19212e;
+    --muted: #5c6773; --faint: #8b96a4; --hair: #e4e8ee; --hair-strong: #d3d9e2;
+    --accent: #b3801d; --accent-soft: #f4ead2; --ok: #157d64; --ok-soft: #dcefe8;
+    --pend: #b0731a; --pend-soft: #f6ebd6; --err: #c0433c; --err-soft: #f8e0de;
+    --up: #d23c46; --down: #2c6bd0;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 40px 22px 72px; }
+
+  /* Header */
+  .head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px 24px; justify-content: space-between; padding-bottom: 22px; border-bottom: 1px solid var(--hair); }
+  .head h1 { font-size: 1.55rem; margin: 0 0 6px; letter-spacing: -0.02em; text-wrap: balance; }
+  .head .sub { color: var(--muted); font-size: .92rem; margin: 0; }
+  .phase-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--accent-soft); color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    padding: 7px 13px; border-radius: 999px; font-size: .8rem; font-weight: 700;
+    white-space: nowrap;
+  }
+  .phase-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+  /* Stat row */
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 24px 0 28px; }
+  .stat { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--radius); padding: 16px 16px 14px; }
+  .stat .k { font-size: .72rem; color: var(--faint); text-transform: uppercase; letter-spacing: .07em; font-weight: 700; }
+  .stat .v { font-size: 1.7rem; font-weight: 700; font-family: var(--mono); letter-spacing: -0.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .stat .note { font-size: .78rem; color: var(--muted); margin-top: 2px; }
+
+  /* Grid + panels */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .panel { background: var(--surface); border: 1px solid var(--hair); border-radius: var(--radius); overflow: hidden; }
+  .panel > h2 {
+    font-size: .82rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+    margin: 0; padding: 14px 18px; border-bottom: 1px solid var(--hair); font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel .body { padding: 6px 18px 16px; }
+  .full { grid-column: 1 / -1; }
+
+  /* Pills */
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: .74rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .pill.ok   { background: var(--ok-soft); color: var(--ok); }
+  .pill.pend { background: var(--pend-soft); color: var(--pend); }
+  .pill.err  { background: var(--err-soft); color: var(--err); }
+  .pill.todo { background: color-mix(in srgb, var(--muted) 14%, transparent); color: var(--muted); }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); font-weight: 700; padding: 12px 0 8px; border-bottom: 1px solid var(--hair); }
+  td { padding: 12px 0; border-bottom: 1px solid var(--hair); font-size: .92rem; }
+  tr:last-child td { border-bottom: none; }
+  th.num, td.num { text-align: right; font-family: var(--mono); }
+  .tick { color: var(--faint); font-family: var(--mono); font-size: .78rem; }
+  .up { color: var(--up); } .down { color: var(--down); }
+
+  /* Pipeline steps */
+  .steps { list-style: none; margin: 0; padding: 4px 0; }
+  .steps li { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--hair); }
+  .steps li:last-child { border-bottom: none; }
+  .steps .idx { font-family: var(--mono); font-size: .78rem; color: var(--faint); width: 20px; flex: none; }
+  .steps .label { flex: 1; font-size: .92rem; }
+  .steps .label small { display: block; color: var(--muted); font-size: .78rem; font-weight: 400; }
+
+  /* Disclosure cards */
+  .disc { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .disc .card { border: 1px solid var(--hair); border-radius: 10px; background: var(--surface-2); padding: 13px 14px; }
+  .disc .card h3 { margin: 0 0 2px; font-size: .95rem; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .disc .card .cnt { font-family: var(--mono); font-size: .78rem; color: var(--faint); font-weight: 400; }
+  .disc ul { list-style: none; margin: 8px 0 0; padding: 0; }
+  .disc li { font-size: .82rem; padding: 5px 0; border-top: 1px dashed var(--hair); display: flex; gap: 8px; align-items: baseline; }
+  .disc li:first-child { border-top: none; }
+  .disc .date { font-family: var(--mono); font-size: .72rem; color: var(--faint); flex: none; }
+  .disc .sig { color: var(--ink); font-weight: 600; }
+  .disc .noise { color: var(--faint); }
+  .tag { font-size: .64rem; font-weight: 700; padding: 1px 6px; border-radius: 5px; margin-left: auto; flex: none; align-self: center; }
+  .tag.s { background: var(--accent-soft); color: var(--accent); }
+  .tag.n { background: color-mix(in srgb, var(--muted) 12%, transparent); color: var(--faint); }
+
+  /* Roadmap */
+  .road { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .road .ph { border: 1px solid var(--hair); border-radius: 10px; padding: 15px 15px 16px; background: var(--surface-2); position: relative; }
+  .road .ph.active { border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface)); }
+  .road .ph .n { font-family: var(--mono); font-size: .72rem; color: var(--faint); letter-spacing: .04em; }
+  .road .ph h3 { margin: 3px 0 8px; font-size: 1rem; }
+  .road .ph ul { margin: 0; padding-left: 16px; color: var(--muted); font-size: .82rem; }
+  .road .ph li { padding: 2px 0; }
+
+  /* Next actions */
+  .next { list-style: none; margin: 0; padding: 0; }
+  .next li { display: flex; gap: 12px; align-items: flex-start; padding: 12px 0; border-bottom: 1px solid var(--hair); }
+  .next li:last-child { border-bottom: none; }
+  .next .mark { font-family: var(--mono); font-weight: 700; color: var(--accent); flex: none; font-size: .85rem; margin-top: 1px; }
+  .next .t { font-size: .92rem; }
+  .next .t small { display: block; color: var(--muted); font-size: .8rem; }
+
+  code { font-family: var(--mono); font-size: .85em; background: color-mix(in srgb, var(--muted) 12%, transparent); padding: 1px 5px; border-radius: 5px; }
+
+  footer { margin-top: 32px; padding-top: 18px; border-top: 1px solid var(--hair); color: var(--faint); font-size: .8rem; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+
+  .section-title { font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); font-weight: 700; margin: 30px 0 12px; }
+
+  @media (max-width: 760px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .grid { grid-template-columns: 1fr; }
+    .disc, .road { grid-template-columns: 1fr; }
+  }
+</style>
+
+<div class="wrap">
+  <header class="head">
+    <div>
+      <h1>AI 주식 투자 프로그램</h1>
+      <p class="sub">DART 공시를 AI가 분석 → 투자 신호 생성 · 한국투자증권(KIS) 연동 · 모의투자 우선</p>
+    </div>
+    <span class="phase-badge"><span class="dot"></span>PHASE 1 · 읽기 전용 (주문 없음)</span>
+  </header>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="k">데이터 파이프라인</div>
+      <div class="v" style="color:var(--ok)">2 / 3</div>
+      <div class="note">KIS · DART 정상 · AI 대기</div>
+    </div>
+    <div class="stat">
+      <div class="k">감시 종목</div>
+      <div class="v">3</div>
+      <div class="note">삼성전자 · SK하이닉스 · NAVER</div>
+    </div>
+    <div class="stat">
+      <div class="k">수집된 공시</div>
+      <div class="v">22</div>
+      <div class="note">최근 · 실시간 DART 조회</div>
+    </div>
+    <div class="stat">
+      <div class="k">실행된 주문</div>
+      <div class="v">0</div>
+      <div class="note">설계상 주문 불가 (안전)</div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- 현재가 -->
+    <section class="panel">
+      <h2>시세 조회 <span class="pill ok"><span class="dot"></span>KIS 정상</span></h2>
+      <div class="body">
+        <table>
+          <thead>
+            <tr><th>종목</th><th class="num">현재가</th><th class="num">등락률</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>삼성전자 <span class="tick">005930</span></td>
+              <td class="num">255,000</td>
+              <td class="num down">-8.77%</td>
+            </tr>
+            <tr>
+              <td>SK하이닉스 <span class="tick">000660</span></td>
+              <td class="num">1,842,000</td>
+              <td class="num down">-11.53%</td>
+            </tr>
+            <tr>
+              <td>NAVER <span class="tick">035420</span></td>
+              <td class="num" style="color:var(--faint)">—</td>
+              <td class="num"><span class="pill err"><span class="dot"></span>500 오류</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="font-size:.78rem;color:var(--muted);margin:12px 0 0">한국식 표기 · 하락 <span class="down" style="font-weight:700">파랑</span> / 상승 <span class="up" style="font-weight:700">빨강</span>. NAVER는 KIS 서버 일시 오류 — 재시도 로직 예정.</p>
+      </div>
+    </section>
+
+    <!-- 파이프라인 상태 -->
+    <section class="panel">
+      <h2>시스템 파이프라인</h2>
+      <div class="body">
+        <ul class="steps">
+          <li>
+            <span class="idx">1</span>
+            <span class="label">데이터 수집 <small>DART 전자공시 API</small></span>
+            <span class="pill ok"><span class="dot"></span>정상</span>
+          </li>
+          <li>
+            <span class="idx">2</span>
+            <span class="label">시세 조회 <small>KIS 모의투자 도메인</small></span>
+            <span class="pill ok"><span class="dot"></span>정상</span>
+          </li>
+          <li>
+            <span class="idx">3</span>
+            <span class="label">AI 분석 <small>Claude · 공시 → 신호+근거</small></span>
+            <span class="pill pend"><span class="dot"></span>키 대기</span>
+          </li>
+          <li>
+            <span class="idx">4</span>
+            <span class="label">리스크 규칙 <small>손절 · 익절 · 한도</small></span>
+            <span class="pill todo"><span class="dot"></span>Phase 2</span>
+          </li>
+          <li>
+            <span class="idx">5</span>
+            <span class="label">주문 실행 <small>KIS 모의 → 실전</small></span>
+            <span class="pill todo"><span class="dot"></span>Phase 2</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+  </div>
+
+  <div class="section-title">수집된 공시 (실제 조회 결과) · <span style="color:var(--accent)">신호 후보</span> vs <span style="color:var(--faint)">노이즈</span></div>
+  <section class="panel full">
+    <div class="body">
+      <div class="disc">
+        <div class="card">
+          <h3>삼성전자 <span class="cnt">6건</span></h3>
+          <ul>
+            <li><span class="date">07/16</span><span class="sig">자기주식처분결과보고서</span><span class="tag s">신호</span></li>
+            <li><span class="date">07/16</span><span class="noise">임원·주요주주 소유상황보고</span><span class="tag n">노이즈</span></li>
+            <li><span class="date">07/15</span><span class="noise">임원·주요주주 소유상황보고</span><span class="tag n">노이즈</span></li>
+            <li><span class="date">07/15</span><span class="noise">[기재정정] 소유상황보고</span><span class="tag n">노이즈</span></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>SK하이닉스 <span class="cnt">4건</span></h3>
+          <ul>
+            <li><span class="date">07/15</span><span class="sig">유상증자·사채 발행결과</span><span class="tag s">신호</span></li>
+            <li><span class="date">07/15</span><span class="sig">기업설명회(IR) 개최</span><span class="tag s">신호</span></li>
+            <li><span class="date">07/15</span><span class="sig">증권발행실적보고서</span><span class="tag s">신호</span></li>
+            <li><span class="date">07/16</span><span class="noise">임원·주요주주 소유상황보고</span><span class="tag n">노이즈</span></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>NAVER <span class="cnt">12건</span></h3>
+          <ul>
+            <li><span class="date">07/16</span><span class="sig">기업설명회(IR) 개최</span><span class="tag s">신호</span></li>
+            <li><span class="date">07/16</span><span class="noise">임원·주요주주 소유상황보고 ×11</span><span class="tag n">노이즈</span></li>
+          </ul>
+        </div>
+      </div>
+      <p style="font-size:.8rem;color:var(--muted);margin:14px 2px 2px">
+        관찰: 공시의 상당수가 <b>임원·주요주주 소유상황보고서</b>(정기 신고, 저신호). 다음 단계에서 <b>공시 유형 필터</b>로 걸러 AI 토큰과 노이즈를 줄일 예정.
+      </p>
+    </div>
+  </section>
+
+  <div class="section-title">로드맵</div>
+  <div class="road">
+    <div class="ph active">
+      <div class="n">PHASE 1 · 진행 중</div>
+      <h3>읽기 전용 파이프라인</h3>
+      <ul>
+        <li>DART 공시 수집 ✓</li>
+        <li>KIS 시세 조회 ✓</li>
+        <li>AI 신호 생성 (키 대기)</li>
+        <li>로그 출력만 · 주문 없음</li>
+      </ul>
+    </div>
+    <div class="ph">
+      <div class="n">PHASE 2 · 예정</div>
+      <h3>모의투자 매매</h3>
+      <ul>
+        <li>리스크 규칙 (손절/익절/한도)</li>
+        <li>KIS 모의계좌 주문</li>
+        <li>판단·주문 로그 저장</li>
+        <li>며칠~몇 주 검증</li>
+      </ul>
+    </div>
+    <div class="ph">
+      <div class="n">PHASE 3 · 예정</div>
+      <h3>소액 실전</h3>
+      <ul>
+        <li>실계좌 소액 전환</li>
+        <li>한도·안전장치 유지</li>
+        <li>알림 (텔레그램 등)</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="section-title">다음 작업</div>
+  <section class="panel full">
+    <div class="body">
+      <ul class="next">
+        <li>
+          <span class="mark">01</span>
+          <span class="t">Anthropic API 키 입력
+            <small>console.anthropic.com에서 발급 → <code>.env</code>의 <code>ANTHROPIC_API_KEY</code>. 이것만 넣으면 AI 분석까지 완전 동작.</small></span>
+        </li>
+        <li>
+          <span class="mark">02</span>
+          <span class="t">공시 유형 필터
+            <small>‘임원·주요주주 소유상황보고서’ 등 저신호 공시 제외 → 비용·노이즈 감소.</small></span>
+        </li>
+        <li>
+          <span class="mark">03</span>
+          <span class="t">KIS 시세 재시도 로직
+            <small>NAVER 500 같은 일시 오류에 재시도 백오프 추가.</small></span>
+        </li>
+        <li>
+          <span class="mark">04</span>
+          <span class="t">공시 전문(본문) 분석
+            <small>제목뿐 아니라 공시 본문까지 파싱해 분석 정확도 향상.</small></span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    <span>AI 주식 투자 프로그램 · Phase 1 상태 스냅샷</span>
+    <span>기준일 2026-07-18 · <code>D:\workspace\ai-stock-trader</code></span>
+  </footer>
+</div>

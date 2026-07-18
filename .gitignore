@@ -1,0 +1,17 @@
+# 절대 커밋 금지 — API 키/시크릿
+.env
+.env.*
+!.env.example
+
+# 캐시/토큰/로그
+data/*.json
+data/*.zip
+data/token_cache.json
+logs/
+*.log
+
+# 파이썬
+__pycache__/
+*.pyc
+.venv/
+venv/

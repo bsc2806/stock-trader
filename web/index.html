@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI 자율 트레이더</title>
+<style>
+  :root{
+    --ground:#f5f6f8; --surface:#fff; --surface-2:#fafbfc; --ink:#18202c;
+    --muted:#5b6672; --faint:#8a95a2; --hair:#e6eaef; --accent:#b3801d; --accent-soft:#f4ead2;
+    --up:#d63b45; --down:#2c6bd0;
+    --buy:#157d64; --buy-soft:#ddefe8; --sell:#c0433c; --sell-soft:#f8e0de; --neutral-soft:#eef1f4;
+    --mono:ui-monospace,"Cascadia Code",Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+  }
+  @media (prefers-color-scheme:dark){:root{
+    --ground:#0d1219; --surface:#141b25; --surface-2:#101620; --ink:#e9edf3;
+    --muted:#96a2b1; --faint:#68758a; --hair:#242e3a; --accent:#e0aa4c; --accent-soft:#2b2211;
+    --up:#ef5761; --down:#5a92ec; --buy:#4fc0a1; --buy-soft:#12271f; --sell:#e8756c; --sell-soft:#2c1615; --neutral-soft:#1c242f;
+  }}
+  :root[data-theme="dark"]{
+    --ground:#0d1219; --surface:#141b25; --surface-2:#101620; --ink:#e9edf3;
+    --muted:#96a2b1; --faint:#68758a; --hair:#242e3a; --accent:#e0aa4c; --accent-soft:#2b2211;
+    --up:#ef5761; --down:#5a92ec; --buy:#4fc0a1; --buy-soft:#12271f; --sell:#e8756c; --sell-soft:#2c1615; --neutral-soft:#1c242f;
+  }
+  :root[data-theme="light"]{
+    --ground:#f5f6f8; --surface:#fff; --surface-2:#fafbfc; --ink:#18202c;
+    --muted:#5b6672; --faint:#8a95a2; --hair:#e6eaef; --accent:#b3801d; --accent-soft:#f4ead2;
+    --up:#d63b45; --down:#2c6bd0; --buy:#157d64; --buy-soft:#ddefe8; --sell:#c0433c; --sell-soft:#f8e0de; --neutral-soft:#eef1f4;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:940px;margin:0 auto;padding:26px 20px 64px;}
+
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;}
+  header h1{font-size:1.25rem;margin:0;letter-spacing:-0.02em;}
+  .meta{display:flex;align-items:center;gap:12px;font-size:.78rem;color:var(--muted);}
+  .live{display:inline-flex;align-items:center;gap:6px;font-weight:600;}
+  .live .dot{width:8px;height:8px;border-radius:50%;background:var(--buy);animation:pulse 2s infinite;}
+  .live.closed .dot{background:var(--faint);animation:none;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--buy) 55%,transparent);}70%{box-shadow:0 0 0 7px transparent;}100%{box-shadow:0 0 0 0 transparent;}}
+  @media (prefers-reduced-motion:reduce){.live .dot{animation:none;}}
+  .refresh-btn{font-family:inherit;font-size:.78rem;font-weight:600;color:var(--accent);background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:999px;padding:4px 12px;cursor:pointer;}
+  .refresh-btn:hover{filter:brightness(1.05);}
+  .refresh-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+  .env{font-family:var(--mono);font-size:.72rem;font-weight:700;background:var(--accent-soft);color:var(--accent);padding:3px 9px;border-radius:999px;}
+
+  .banner{background:var(--accent-soft);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:10px;padding:10px 13px;font-size:.82rem;margin-bottom:14px;}
+  .banner.alert{background:var(--sell-soft);color:var(--sell);border-color:color-mix(in srgb,var(--sell) 30%,transparent);}
+
+  /* Tabs */
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--hair);margin-bottom:20px;overflow-x:auto;}
+  .tab{background:none;border:none;color:var(--muted);font-family:inherit;font-size:.9rem;font-weight:600;padding:10px 15px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;}
+  .tab:hover{color:var(--ink);}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+
+  .card{background:var(--surface);border:1px solid var(--hair);border-radius:14px;overflow:hidden;margin-bottom:16px;}
+  .card > h2{font-size:.8rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0;padding:14px 18px;border-bottom:1px solid var(--hair);font-weight:700;}
+  .card .inner{padding:8px 18px 15px;}
+
+  /* Hero */
+  .hero{background:var(--surface);border:1px solid var(--hair);border-radius:16px;padding:22px 24px;margin-bottom:16px;}
+  .hero .label{font-size:.76rem;color:var(--faint);text-transform:uppercase;letter-spacing:.07em;font-weight:700;}
+  .hero .pnl{font-size:2.4rem;font-weight:800;font-family:var(--mono);letter-spacing:-0.03em;margin:5px 0 2px;font-variant-numeric:tabular-nums;}
+  .hero .rate{font-size:.95rem;font-weight:700;font-family:var(--mono);}
+  .hero .bd{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px;padding-top:16px;border-top:1px solid var(--hair);}
+  .hero .bd .k{font-size:.72rem;color:var(--faint);font-weight:600;}
+  .hero .bd .v{font-size:1rem;font-weight:700;font-family:var(--mono);margin-top:2px;font-variant-numeric:tabular-nums;}
+
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;}
+  th{text-align:left;font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:var(--faint);font-weight:700;padding:10px 0 7px;border-bottom:1px solid var(--hair);}
+  td{padding:11px 0;border-bottom:1px solid var(--hair);font-size:.88rem;vertical-align:top;}
+  tr:last-child td{border-bottom:none;}
+  th.num,td.num{text-align:right;font-family:var(--mono);}
+  .name{font-weight:600;} .code{color:var(--faint);font-family:var(--mono);font-size:.74rem;margin-left:5px;}
+  .up{color:var(--up);} .down{color:var(--down);} .flat{color:var(--muted);}
+
+  .tag{display:inline-flex;align-items:center;font-size:.72rem;font-weight:700;padding:3px 9px;border-radius:999px;white-space:nowrap;}
+  .tag.buy,.tag.take{background:var(--buy-soft);color:var(--buy);}
+  .tag.sell,.tag.stop{background:var(--sell-soft);color:var(--sell);}
+  .tag.hold,.tag.watch{background:var(--neutral-soft);color:var(--muted);}
+  .tag.high{background:var(--accent-soft);color:var(--accent);}
+  .tag.medium,.tag.low{background:var(--neutral-soft);color:var(--muted);}
+
+  .plan-item{border:1px solid var(--hair);border-radius:10px;background:var(--surface-2);padding:13px 15px;margin-bottom:10px;}
+  .plan-item .top{display:flex;justify-content:space-between;align-items:baseline;gap:10px;}
+  .plan-item .amt{font-family:var(--mono);font-weight:700;}
+  .plan-item .reason{font-size:.82rem;color:var(--muted);margin-top:6px;}
+  .tag.hz-long{background:var(--accent-soft);color:var(--accent);}
+  .tag.hz-short{background:color-mix(in srgb,var(--down) 16%,transparent);color:var(--down);}
+  .period{font-family:var(--mono);font-size:.74rem;color:var(--muted);margin-left:6px;}
+  .hz-head{font-size:.82rem;font-weight:700;color:var(--ink);margin:16px 0 9px;display:flex;align-items:center;gap:6px;}
+  .hz-head:first-child{margin-top:2px;}
+  .hz-head .sub{font-weight:600;color:var(--faint);font-size:.85em;}
+  .cand{padding:11px 0;border-bottom:1px solid var(--hair);}
+  .cand:last-child{border-bottom:none;}
+  .cand .disc{font-size:.78rem;color:var(--muted);margin-top:3px;}
+  .cand .date{font-family:var(--mono);font-size:.72rem;color:var(--faint);margin-right:6px;}
+
+  .empty{text-align:center;color:var(--faint);font-size:.86rem;padding:26px 10px;}
+  .rules{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .rule{border:1px solid var(--hair);border-radius:10px;background:var(--surface-2);padding:12px 14px;}
+  .rule .k{font-size:.78rem;color:var(--muted);}
+  .rule .v{font-size:1.15rem;font-weight:700;font-family:var(--mono);margin-top:3px;}
+  .defense{background:var(--buy-soft);color:var(--buy);border-radius:10px;padding:12px 14px;font-size:.84rem;font-weight:600;margin-bottom:14px;}
+  .ladder{display:flex;flex-direction:column;gap:8px;}
+  .ladder .step{display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px solid var(--hair);border-radius:10px;background:var(--surface-2);}
+  .ladder .step.cur{border-color:var(--accent);background:var(--accent-soft);}
+  .ladder .step .th{font-family:var(--mono);font-weight:700;width:66px;flex:none;font-variant-numeric:tabular-nums;}
+  .ladder .step .lab{flex:1;font-size:.88rem;}
+  .ladder .step .now{font-size:.72rem;font-weight:700;color:var(--accent);white-space:nowrap;}
+  .hint{font-size:.66rem;font-weight:700;padding:1px 7px;border-radius:5px;margin-left:6px;}
+  .hint.long{background:var(--accent-soft);color:var(--accent);}
+  .hint.short{background:color-mix(in srgb,var(--down) 15%,transparent);color:var(--down);}
+  .hint.mix{background:var(--neutral-soft);color:var(--muted);}
+
+  .clock{font-family:var(--mono);font-size:.82rem;color:var(--muted);margin-top:4px;font-variant-numeric:tabular-nums;}
+
+  /* 포트폴리오 통계 */
+  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .stat{border:1px solid var(--hair);border-radius:10px;background:var(--surface-2);padding:12px 14px;}
+  .stat .k{font-size:.72rem;color:var(--faint);font-weight:600;text-transform:uppercase;letter-spacing:.03em;}
+  .stat .v{font-size:1.15rem;font-weight:700;font-family:var(--mono);margin-top:3px;font-variant-numeric:tabular-nums;}
+  .stat .v small{font-size:.72rem;color:var(--muted);font-weight:600;}
+
+  /* 도넛 */
+  .donut-wrap{display:flex;align-items:center;gap:22px;flex-wrap:wrap;}
+  .donut{flex:none;position:relative;width:150px;height:150px;}
+  .donut .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;}
+  .donut .center .big{font-size:1rem;font-weight:800;font-family:var(--mono);}
+  .donut .center .cap{font-size:.66rem;color:var(--faint);}
+  .legend{flex:1;min-width:200px;display:flex;flex-direction:column;gap:8px;}
+  .legend .row{display:flex;align-items:center;gap:9px;font-size:.85rem;}
+  .legend .sw{width:11px;height:11px;border-radius:3px;flex:none;}
+  .legend .lab{flex:1;}
+  .legend .val{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+  .legend .pctv{font-family:var(--mono);color:var(--muted);font-size:.78rem;width:52px;text-align:right;}
+
+  footer{margin-top:22px;color:var(--faint);font-size:.75rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;}
+  code{font-family:var(--mono);font-size:.85em;background:color-mix(in srgb,var(--muted) 14%,transparent);padding:1px 5px;border-radius:5px;}
+  @media (max-width:720px){.hero .pnl{font-size:2rem;}.rules{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>AI 자율 트레이더</h1>
+      <div class="clock" id="clock">—</div>
+    </div>
+    <div class="meta">
+      <span class="live" id="live"><span class="dot"></span><span id="live-text">연결 중…</span></span>
+      <button class="refresh-btn" id="refresh-btn" hidden>새로고침</button>
+      <span class="env" id="env">—</span>
+    </div>
+  </header>
+
+  <div id="banner"></div>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="overview">개요</button>
+    <button class="tab" data-tab="portfolio">포트폴리오</button>
+    <button class="tab" data-tab="brain">AI 발굴·계획</button>
+    <button class="tab" data-tab="trades">매매 내역</button>
+    <button class="tab" data-tab="risk">리스크</button>
+  </nav>
+
+  <!-- 개요 -->
+  <section class="panel active" id="tab-overview">
+    <div class="hero">
+      <div class="label">평가 손익 (모의계좌)</div>
+      <div class="pnl flat" id="pnl">—</div>
+      <div class="rate flat" id="pnl-rate">—</div>
+      <div class="bd">
+        <div><div class="k">총 평가금액</div><div class="v" id="total-eval">—</div></div>
+        <div><div class="k">매입 금액</div><div class="v" id="buy-amount">—</div></div>
+        <div><div class="k">예수금</div><div class="v" id="cash">—</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>보유 종목</h2>
+      <div class="inner" id="holdings"><div class="empty">불러오는 중…</div></div>
+    </div>
+    <div class="card">
+      <h2>AI가 지금 사려는 종목</h2>
+      <div class="inner" id="plan-summary"><div class="empty">두뇌 분석 대기 중…</div></div>
+    </div>
+  </section>
+
+  <!-- 포트폴리오 -->
+  <section class="panel" id="tab-portfolio">
+    <div class="card">
+      <h2>통계</h2>
+      <div class="inner"><div class="stat-grid" id="pf-stats"><div class="empty">불러오는 중…</div></div></div>
+    </div>
+    <div class="card">
+      <h2>자산 구성</h2>
+      <div class="inner"><div id="pf-alloc"><div class="empty">불러오는 중…</div></div></div>
+    </div>
+    <div class="card">
+      <h2>종목별 배분 · 손익</h2>
+      <div class="inner"><div id="pf-holdings"><div class="empty">불러오는 중…</div></div></div>
+    </div>
+  </section>
+
+  <!-- AI 발굴·계획 -->
+  <section class="panel" id="tab-brain">
+    <div class="card">
+      <h2>AI 매수 계획 · 종목별 근거</h2>
+      <div class="inner" id="plan-full"><div class="empty">분석 대기 중…</div></div>
+    </div>
+    <div class="card">
+      <h2>시장 스캔 · 발굴된 신호성 종목 <span id="cand-count" style="color:var(--faint);font-weight:600;"></span></h2>
+      <div class="inner" id="candidates"><div class="empty">스캔 대기 중…</div></div>
+    </div>
+  </section>
+
+  <!-- 매매 내역 -->
+  <section class="panel" id="tab-trades">
+    <div class="card">
+      <h2>체결 내역</h2>
+      <div class="inner" id="trades"><div class="empty">불러오는 중…</div></div>
+    </div>
+  </section>
+
+  <!-- 리스크 -->
+  <section class="panel" id="tab-risk">
+    <div id="defense-state"></div>
+    <div class="card">
+      <h2>단계적 낙폭 방어 (계좌 전체)</h2>
+      <div class="inner" id="defense-ladder"><div class="empty">불러오는 중…</div></div>
+    </div>
+    <div class="card">
+      <h2>매매 기준 (AI가 넘을 수 없는 규칙)</h2>
+      <div class="inner"><div class="rules" id="rules"><div class="empty">불러오는 중…</div></div></div>
+    </div>
+  </section>
+
+  <footer>
+    <span>KIS · DART · AI(Claude) · <b>주문 실행 없음(관측 전용)</b></span>
+    <span id="updated">—</span>
+  </footer>
+</div>
+
+<script>
+const won = n => (n==null ? "—" : Number(n).toLocaleString("ko-KR")+"원");
+const pct = n => (n==null ? "—" : (n>0?"+":"")+Number(n).toFixed(2)+"%");
+const dcls = n => (n>0?"up":n<0?"down":"flat");
+const esc = s => (s==null?"":String(s)).replace(/[<>&]/g,c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));
+
+// 탭 전환
+document.getElementById("tabs").addEventListener("click", e=>{
+  const btn = e.target.closest(".tab"); if(!btn) return;
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("active", t===btn));
+  const id = btn.dataset.tab;
+  document.querySelectorAll(".panel").forEach(p=>p.classList.toggle("active", p.id==="tab-"+id));
+});
+
+const RULE_LABELS = {
+  short_stop_pct:"단기 손절", short_trail_activate_pct:"단기 익절발동", short_trail_giveback_pct:"단기 반납허용",
+  long_stop_pct:"장기 손절", long_trail_activate_pct:"장기 익절발동", long_trail_giveback_pct:"장기 반납허용",
+  max_equity_pct:"주식 최대 비중", max_position_pct:"종목당 최대 비중",
+  max_positions:"동시 보유 종목", daily_loss_limit_pct:"일일 손실 한도",
+};
+const RULE_UNIT = {max_positions:"종목"};
+const HINT_CLS = {"장기":"long","단기":"short","혼재":"mix"};
+function hintTag(h){ return h?`<span class="hint ${HINT_CLS[h]||"mix"}">${esc(h)}</span>`:""; }
+
+function planItem(p){
+  const hz=p.horizon||"";
+  const hzCls = hz==="장기"?"hz-long":"hz-short";
+  const hzTag = hz?`<span class="tag ${hzCls}" style="margin-left:8px;">${esc(hz)}</span>`:"";
+  const period = p.holding_period?`<span class="period">· ${esc(p.holding_period)}</span>`:"";
+  return `<div class="plan-item">
+    <div class="top">
+      <div><span class="name">${esc(p.name)}</span><span class="code">${esc(p.code)}</span>
+        ${hzTag}<span class="tag ${p.conviction}" style="margin-left:5px;">확신 ${esc(p.conviction)}</span>${period}</div>
+      <span class="amt">${won(p.amount)}</span>
+    </div>
+    <div class="reason">${esc(p.reason)}</div>
+  </div>`;
+}
+function planGrouped(plan){
+  const L=plan.filter(p=>p.horizon==="장기"), S=plan.filter(p=>p.horizon==="단기");
+  const O=plan.filter(p=>p.horizon!=="장기"&&p.horizon!=="단기");
+  let h="";
+  if(L.length) h+=`<div class="hz-head">📈 장기 투자 <span class="sub">${L.length}종목 · 수개월~수년</span></div>`+L.map(planItem).join("");
+  if(S.length) h+=`<div class="hz-head">⚡ 단기 매매 <span class="sub">${S.length}종목 · 당일~며칠</span></div>`+S.map(planItem).join("");
+  if(O.length) h+=O.map(planItem).join("");
+  return h;
+}
+
+// ---- 포트폴리오: 도넛/통계 ----
+function getVar(n){ return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+const PF_PALETTE=["#4f8ef7","#e0a94a","#4fc0a1","#e8756c","#a97bd6","#5cc2d6","#d98cae","#8bbf5a"];
+
+function donutSVG(segments, big, cap){
+  const total = segments.reduce((a,s)=>a+s.value,0) || 1;
+  const size=150, sw=20, r=(size-sw)/2, cx=size/2, cy=size/2, C=2*Math.PI*r;
+  let acc=0;
+  const arcs = segments.filter(s=>s.value>0).map(s=>{
+    const len=s.value/total*C;
+    const c=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.color}" stroke-width="${sw}"
+      stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-acc}" transform="rotate(-90 ${cx} ${cy})"/>`;
+    acc+=len; return c;
+  }).join("");
+  const track=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${getVar('--hair')}" stroke-width="${sw}"/>`;
+  return `<div class="donut"><svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">${track}${arcs}</svg>
+    <div class="center"><div class="big">${big}</div><div class="cap">${cap}</div></div></div>`;
+}
+
+function renderPortfolio(s){
+  const bal=s.balance||{}, sum=bal.summary||{};
+  const net=sum.net_asset||0, cash=sum.cash||0, stock=Math.max(0,net-cash);
+  const pnl=sum.pnl_amount||0, holdings=bal.holdings||[];
+
+  // 통계
+  const statsEl=document.getElementById("pf-stats");
+  if(!bal.ok || !net){ statsEl.innerHTML=`<div class="empty">불러오는 중…</div>`; }
+  else{
+    const wins=holdings.filter(h=>h.pnl_amt>0).length;
+    const winRate=holdings.length?Math.round(wins/holdings.length*100):null;
+    const sorted=holdings.slice().sort((a,b)=>b.pnl_rate-a.pnl_rate);
+    const best=sorted[0], worst=sorted[sorted.length-1];
+    const tiles=[
+      ["순자산", won(net)],
+      ["평가손익", `<span class="${dcls(pnl)}">${(pnl>0?"+":"")+won(pnl)}</span>`],
+      ["수익률", `<span class="${dcls(pnl)}">${pct(sum.pnl_rate)}</span>`],
+      ["주식 편입비율", (net?stock/net*100:0).toFixed(1)+"%"],
+      ["보유 종목", holdings.length+"종목"],
+      ["승률(보유)", winRate==null?"—":`${winRate}% <small>${wins}/${holdings.length}</small>`],
+    ];
+    if(best) tiles.push(["최고 수익", `${esc(best.name)} <small class="${dcls(best.pnl_rate)}">${pct(best.pnl_rate)}</small>`]);
+    if(worst && holdings.length>1) tiles.push(["최저 수익", `${esc(worst.name)} <small class="${dcls(worst.pnl_rate)}">${pct(worst.pnl_rate)}</small>`]);
+    statsEl.innerHTML=tiles.map(t=>`<div class="stat"><div class="k">${t[0]}</div><div class="v">${t[1]}</div></div>`).join("");
+  }
+
+  // 자산 구성 도넛
+  const allocEl=document.getElementById("pf-alloc");
+  if(!bal.ok || !net){ allocEl.innerHTML=`<div class="empty">불러오는 중…</div>`; }
+  else{
+    const seg=[{label:"주식",value:stock,color:getVar('--accent')},{label:"현금",value:cash,color:getVar('--down')}];
+    const leg=`<div class="legend">`+seg.map(x=>`<div class="row"><span class="sw" style="background:${x.color}"></span>
+      <span class="lab">${x.label}</span><span class="val">${won(x.value)}</span>
+      <span class="pctv">${(net?x.value/net*100:0).toFixed(1)}%</span></div>`).join("")+`</div>`;
+    allocEl.innerHTML=`<div class="donut-wrap">${donutSVG(seg,(net?Math.round(stock/net*100):0)+"%","주식 비중")}${leg}</div>`;
+  }
+
+  // 종목별 배분
+  const hEl=document.getElementById("pf-holdings");
+  if(!holdings.length){ hEl.innerHTML=`<div class="empty">보유 종목 없음<br><span style="font-size:.8em">AI가 매수하면 종목별 비중·손익이 채워집니다</span></div>`; }
+  else{
+    const seg=holdings.map((h,i)=>({label:h.name,value:h.eval_amt,color:PF_PALETTE[i%PF_PALETTE.length]}));
+    const te=seg.reduce((a,x)=>a+x.value,0)||1;
+    const leg=`<div class="legend">`+holdings.map((h,i)=>`<div class="row"><span class="sw" style="background:${PF_PALETTE[i%PF_PALETTE.length]}"></span>
+      <span class="lab">${esc(h.name)}</span>
+      <span class="val ${dcls(h.pnl_amt)}">${(h.pnl_amt>0?"+":"")+won(h.pnl_amt)}</span>
+      <span class="pctv">${(h.eval_amt/te*100).toFixed(1)}%</span></div>`).join("")+`</div>`;
+    hEl.innerHTML=`<div class="donut-wrap">${donutSVG(seg,holdings.length+"종목","보유")}${leg}</div>`;
+  }
+}
+
+// ---- 실시간 시계 ----
+const DOW_KR=["일","월","화","수","목","금","토"];
+function updateClock(){
+  const d=new Date(), p=n=>String(n).padStart(2,"0");
+  document.getElementById("clock").textContent =
+    `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} (${DOW_KR[d.getDay()]}) ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+setInterval(updateClock,1000); updateClock();
+
+function render(s){
+  document.getElementById("env").textContent = s.kis_env==="vts"?"모의투자":"실전";
+  document.getElementById("updated").textContent = "업데이트 "+s.updated_at;
+
+  // 배너
+  const b = document.getElementById("banner");
+  const lvl = s.dd_level||"NORMAL";
+  if(lvl==="LIQUIDATE"){ b.innerHTML=`<div class="banner alert">⛔ 전량 청산 단계 — 낙폭 ${s.dd_pct}%. 계좌 방어 발동.</div>`; }
+  else if(lvl==="TRIM"){ b.innerHTML=`<div class="banner alert">⚠️ 부분 정리 단계 — 낙폭 ${s.dd_pct}%. 손실 종목 절반 정리 + 신규 매수 중지.</div>`; }
+  else if(lvl==="HALT_BUY"){ b.innerHTML=`<div class="banner">🛡️ 신규 매수 중지 — 낙폭 ${s.dd_pct}%. 방어 모드.</div>`; }
+  else if(s.ai_available===false){ b.innerHTML=`<div class="banner">⚙️ AI 두뇌 대기 — Anthropic 크레딧이 소진되면 계획이 비어 보일 수 있어요.</div>`; }
+  else { b.innerHTML=""; }
+
+  // 손익 히어로
+  const sum = (s.balance&&s.balance.summary)||{};
+  const pnl = sum.pnl_amount, pEl=document.getElementById("pnl"), rEl=document.getElementById("pnl-rate");
+  if(pnl!=null && s.balance.ok){
+    pEl.textContent = (pnl>0?"+":"")+won(pnl); pEl.className="pnl "+dcls(pnl);
+    rEl.textContent = pct(sum.pnl_rate); rEl.className="rate "+dcls(pnl);
+  } else { pEl.textContent="—"; pEl.className="pnl flat"; rEl.textContent = s.balance.ok?"보유 없음":"불러오는 중"; rEl.className="rate flat"; }
+  document.getElementById("total-eval").textContent = won(sum.total_eval);
+  document.getElementById("buy-amount").textContent = won(sum.buy_amount);
+  document.getElementById("cash").textContent = won(sum.cash);
+
+  // 보유 종목 (손절/익절 판정 포함)
+  const hEl = document.getElementById("holdings");
+  const acts = s.holdings_actions||[];
+  if(!acts.length){ hEl.innerHTML = `<div class="empty">보유 종목 없음<br><span style="font-size:.8em">AI가 매수하면 여기 표시됩니다</span></div>`; }
+  else{
+    const AL={STOP:["stop","손절"],TAKE:["take","상한익절"],TRAIL:["take","트레일링"],HOLD:["hold","유지"]};
+    hEl.innerHTML = `<table><thead><tr><th>종목</th><th class="num">현재가</th><th class="num">평가손익</th><th class="num">판정</th></tr></thead><tbody>`+
+      acts.map(x=>{const a=AL[x.action]||AL.HOLD;return `<tr>
+        <td><span class="name">${esc(x.name)}</span><span class="code">${esc(x.code)}</span>${hintTag(x.horizon)}<br>
+          <span style="font-size:.74rem;color:var(--faint)">${x.qty}주·평단 ${Number(x.avg_price).toLocaleString("ko-KR")}</span></td>
+        <td class="num">${Number(x.price).toLocaleString("ko-KR")}</td>
+        <td class="num ${dcls(x.pnl_amt)}">${(x.pnl_amt>0?"+":"")+Number(x.pnl_amt).toLocaleString("ko-KR")}<br><span style="font-size:.78rem">${pct(x.pnl_rate)}</span></td>
+        <td class="num"><span class="tag ${a[0]}">${a[1]}</span>${x.peak!=null&&x.peak>0?`<br><span style="font-size:.66rem;color:var(--faint)">고점 ${pct(x.peak)}</span>`:""}</td></tr>`;}).join("")+`</tbody></table>`;
+  }
+
+  // AI 계획
+  const plan = s.plan||[];
+  const psEl = document.getElementById("plan-summary"), pfEl=document.getElementById("plan-full");
+  if(!plan.length){
+    const msg = s.circuit ? "서킷브레이커로 매수 중지" : "지금은 확신 가는 매수 종목 없음 · 관망";
+    psEl.innerHTML = `<div class="empty">${msg}</div>`;
+    pfEl.innerHTML = `<div class="empty">${msg}</div>`;
+  } else {
+    psEl.innerHTML = plan.map(planItem).join("");
+    pfEl.innerHTML = planGrouped(plan);
+  }
+
+  // 발굴 후보
+  const cands = s.candidates||[];
+  document.getElementById("cand-count").textContent = cands.length?`${cands.length}종목`:"";
+  const cEl = document.getElementById("candidates");
+  cEl.innerHTML = cands.length ? cands.map(c=>`<div class="cand">
+      <div><span class="name">${esc(c.name)}</span><span class="code">${esc(c.code)}</span>${hintTag(c.horizon_hint)}</div>
+      <div class="disc">${(c.disclosures||[]).slice(0,2).map(d=>`<span class="date">${esc(d.date)}</span>${esc(d.title)}`).join("<br>")}</div>
+    </div>`).join("") : `<div class="empty">스캔 대기 중…</div>`;
+
+  // 매매 내역
+  const tEl = document.getElementById("trades"), tr=s.trades||[];
+  tEl.innerHTML = tr.length ? `<table><thead><tr><th>시각</th><th>구분</th><th>종목</th><th class="num">금액</th></tr></thead><tbody>`+
+    tr.map(t=>`<tr><td>${esc(t.time)}</td><td><span class="tag ${t.side==="BUY"?"buy":"sell"}">${t.side==="BUY"?"매수":"매도"}</span></td>
+      <td><span class="name">${esc(t.name)}</span><span class="code">${esc(t.code)}</span></td>
+      <td class="num">${won(t.amount)}</td></tr>`).join("")+`</tbody></table>`
+    : `<div class="empty">아직 체결 내역이 없습니다<br><span style="font-size:.8em">Phase 2 자동 주문이 켜지면 여기에 쌓입니다</span></div>`;
+
+  // 리스크
+  const rEl2 = document.getElementById("rules"), rules=s.rules||{};
+  rEl2.innerHTML = Object.keys(RULE_LABELS).filter(k=>k in rules).map(k=>{
+    const unit = RULE_UNIT[k] || "%";
+    const v = unit==="원" ? Number(rules[k]).toLocaleString("ko-KR") : rules[k];
+    return `<div class="rule"><div class="k">${RULE_LABELS[k]}</div><div class="v">${v}${unit}</div></div>`;
+  }).join("");
+  renderDefense(s);
+  renderPortfolio(s);
+}
+
+function renderDefense(s){
+  const r=s.rules||{}, lvl=s.dd_level||"NORMAL", dd=(s.dd_pct!=null?s.dd_pct:0);
+  const LAB={HALT_BUY:"신규 매수 중지",TRIM:"부분 정리",LIQUIDATE:"전량 청산"};
+  document.getElementById("defense-state").innerHTML = (lvl==="NORMAL")
+    ? `<div class="defense">🛡️ 낙폭 방어 정상 · 현재 낙폭 ${dd}%</div>`
+    : `<div class="banner ${lvl==="HALT_BUY"?"":"alert"}">방어 단계: ${LAB[lvl]||lvl} · 현재 낙폭 ${dd}%</div>`;
+  const steps=[
+    {k:"HALT_BUY", th:r.dd_halt_buy_pct, lab:"신규 매수 중지"},
+    {k:"TRIM", th:r.dd_trim_pct, lab:"손실 종목 절반 정리"},
+    {k:"LIQUIDATE", th:r.dd_liquidate_pct, lab:"전량 청산 (진짜 붕괴에만)"},
+  ];
+  document.getElementById("defense-ladder").innerHTML =
+    `<div class="ladder">`+steps.map(x=>`<div class="step ${lvl===x.k?"cur":""}">
+      <span class="th">${x.th}%</span><span class="lab">${x.lab}</span>
+      ${lvl===x.k?`<span class="now">◀ 현재</span>`:""}</div>`).join("")+`</div>`;
+}
+
+// 자동 새로고침: 정규장에만 실시간(5초), 장 마감이면 자동 갱신 중지 + 수동 버튼
+const REFRESH_MS=5000;
+const liveEl=document.getElementById("live-text");
+const liveWrap=document.getElementById("live");
+const btn=document.getElementById("refresh-btn");
+let nextAt=0, marketOpen=false, nextOpen="", timer=null, connected=true;
+
+async function refresh(){
+  try{
+    const r=await fetch("/api/state"); const s=await r.json();
+    render(s); connected=true;
+    marketOpen = !!(s.market && s.market.open);
+    nextOpen = (s.market && s.market.next_open) || "";
+    liveWrap.classList.toggle("closed", !marketOpen);
+    btn.hidden = marketOpen;   // 장중=자동, 마감=수동 버튼 노출
+    return s;
+  }catch(e){ connected=false; liveEl.textContent="연결 끊김"; return null; }
+}
+
+function scheduleNext(){
+  clearTimeout(timer);
+  if(marketOpen){ nextAt=Date.now()+REFRESH_MS; timer=setTimeout(cycle, REFRESH_MS); }
+}
+async function cycle(){ await refresh(); scheduleNext(); }
+
+function tick(){
+  if(!connected) return;
+  if(marketOpen){
+    const left=Math.max(0,Math.ceil((nextAt-Date.now())/1000));
+    liveEl.textContent=`실시간 · ${left}초`;
+  } else {
+    liveEl.textContent = nextOpen ? `장 마감 · 다음 장 ${nextOpen}` : "장 마감";
+  }
+}
+
+btn.addEventListener("click", ()=>refresh());
+cycle();
+setInterval(tick, 250);
+</script>
+</body>
+</html>
