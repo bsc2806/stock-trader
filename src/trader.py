@@ -33,6 +33,7 @@ ROOT = Path(__file__).resolve().parent.parent
 STATE_PATH = ROOT / "data" / "state.json"
 TRADES_PATH = ROOT / "data" / "trades.json"
 POSITIONS_PATH = ROOT / "data" / "positions.json"  # 종목별 매수 시 horizon(장기/단기) 기록
+LOG_PATH = ROOT / "data" / "trader_log.json"        # 실행 로그 (대시보드에서 확인)
 
 LOOP_INTERVAL = 300  # --loop 모드: 5분마다
 
@@ -48,6 +49,18 @@ def _read_json(path: Path, default):
 def _write_json(path: Path, data) -> None:
     try:
         path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def log(*args) -> None:
+    """콘솔 출력 + 실행 로그 파일에 기록 (대시보드에서 확인)."""
+    msg = " ".join(str(a) for a in args)
+    sys.stdout.write(msg + "\n")
+    try:
+        logs = _read_json(LOG_PATH, [])
+        logs.insert(0, {"time": dt.datetime.now().strftime("%m-%d %H:%M:%S"), "msg": msg.strip()})
+        _write_json(LOG_PATH, logs[:300])
     except Exception:
         pass
 
@@ -92,16 +105,16 @@ def _sell(h: dict, reason: str, forget: bool = True) -> None:
     if forget and res["ok"]:
         _forget_position(h["code"])  # 부분정리(forget=False)는 유지
     mark = "✅" if res["ok"] else "❌"
-    print(f"    {mark} 매도 {h['name']}({h['code']}) {h['qty']}주 · {reason} · {res['msg']}")
+    log(f"    {mark} 매도 {h['name']}({h['code']}) {h['qty']}주 · {reason} · {res['msg']}")
 
 
 # ---------- 1 사이클 ----------
 def run_cycle() -> None:
     _guard_live()
     mk = market.status()
-    print(f"[{dt.datetime.now():%H:%M:%S}] {mk['session']} · KIS={config.KIS_ENV}")
+    log(f"[{dt.datetime.now():%H:%M:%S}] {mk['session']} · KIS={config.KIS_ENV}")
     if not mk["open"]:
-        print(f"    장 미개장 — 관측만. 다음 장 {mk['next_open']}")
+        log(f"    장 미개장 — 관측만. 다음 장 {mk['next_open']}")
         return
 
     rm = risk.RiskManager()
@@ -129,7 +142,7 @@ def run_cycle() -> None:
 
     # ③ 전량 청산 — 진짜 붕괴에만 (dd_liquidate 이하)
     if level == "LIQUIDATE":
-        print(f"    ⛔ 낙폭 {dd:+.1f}% — 전량 청산 (고점 {peak:,} → {net:,})")
+        log(f"    ⛔ 낙폭 {dd:+.1f}% — 전량 청산 (고점 {peak:,} → {net:,})")
         for h in holdings:
             _sell(h, f"전량청산·낙폭 {dd:+.1f}%")
         return
@@ -177,12 +190,12 @@ def run_cycle() -> None:
 
     # ⑤ 당일 손실 한도 → 신규 매수 중지
     if rm.daily_halt(day_pnl_pct):
-        print(f"    ⚠️ 당일 손익 {day_pnl_pct:+.2f}% — 손실 한도 도달, 신규 매수 중지")
+        log(f"    ⚠️ 당일 손익 {day_pnl_pct:+.2f}% — 손실 한도 도달, 신규 매수 중지")
         return
 
     # 낙폭 방어 단계면 신규 매수 중지 (HALT_BUY / TRIM)
     if level != "NORMAL":
-        print(f"    🛡️ 낙폭 {dd:+.1f}% ({level}) — 신규 매수 중지")
+        log(f"    🛡️ 낙폭 {dd:+.1f}% ({level}) — 신규 매수 중지")
         return
 
     # ⑥ 신규 매수 (매도 반영 위해 잔고 재조회)
@@ -197,9 +210,9 @@ def run_cycle() -> None:
     slots = rm.slots_available(len(holdings2))
     budget = rm.buy_budget(net2, equity2, cash2)
     per_max = rm.max_per_position(net2)
-    print(f"    편입가능 {slots}종목 · 매수예산 {budget:,}원 · 종목당 최대 {per_max:,}원")
+    log(f"    편입가능 {slots}종목 · 매수예산 {budget:,}원 · 종목당 최대 {per_max:,}원")
     if slots <= 0 or budget < rm.r["min_order_amount"]:
-        print("    여유 슬롯/예산 없음 — 매수 없음")
+        log("    여유 슬롯/예산 없음 — 매수 없음")
         return
 
     # AI 종목 선정은 결정 주기(config.AI_DECISION_INTERVAL_MIN)마다 1회만. 그 외엔 저장 계획 재사용.
@@ -208,14 +221,14 @@ def run_cycle() -> None:
         picks = analyzer.select_portfolio(cands, cash=budget, holdings=holdings2, max_slots=slots,
                                           aggressive=(config.KIS_ENV == "vts"))
         plan_store.write(picks)
-        print("    🧠 AI 새 결정")
+        log("    🧠 AI 새 결정")
     else:
         picks = plan_store.read().get("picks", [])
-        print(f"    (AI 결정 {plan_store.age_min()}분 전 계획 재사용 · 다음 결정까지 대기)")
+        log(f"    (AI 결정 {plan_store.age_min()}분 전 계획 재사용 · 다음 결정까지 대기)")
 
     picks = [p for p in picks if p["code"] not in held]  # 이미 보유·중복 편입 방지
     if not picks:
-        print("    신규 매수 없음 — 관망 (보유 중이거나 계획 소진)")
+        log("    신규 매수 없음 — 관망 (보유 중이거나 계획 소진)")
         return
 
     each = min(per_max, budget // len(picks))
@@ -242,23 +255,26 @@ def run_cycle() -> None:
             "ok": res["ok"], "msg": res["msg"], "order_no": res["order_no"],
         })
         mark = "✅" if res["ok"] else "❌"
-        print(f"    {mark} 매수 {p['name']}({p['code']}) {qty}주 × {price:,} · 확신 {p['conviction']} · {res['msg']}")
+        log(f"    {mark} 매수 {p['name']}({p['code']}) {qty}주 × {price:,} · 확신 {p['conviction']} · {res['msg']}")
 
 
 def main() -> None:
     config.require("KIS_APP_KEY", "KIS_APP_SECRET", "DART_API_KEY", "KIS_ACCOUNT_NO")
     loop = "--loop" in sys.argv
     if not loop:
-        run_cycle()
+        try:
+            run_cycle()
+        except Exception as e:
+            log("❌ [사이클 오류]", e)
         return
-    print(f"자율 매매 루프 시작 ({LOOP_INTERVAL}초 간격, 정규장에만 매매). Ctrl+C 종료.")
+    log(f"자율 매매 루프 시작 ({LOOP_INTERVAL}초 간격, 정규장에만 매매). Ctrl+C 종료.")
     while True:
         try:
             run_cycle()
         except SystemExit:
             raise
         except Exception as e:
-            print("    [사이클 오류]", e)
+            log("❌ [사이클 오류]", e)
         time.sleep(LOOP_INTERVAL)
 
 

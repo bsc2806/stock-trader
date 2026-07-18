@@ -112,6 +112,12 @@
   .ladder .step .th{font-family:var(--mono);font-weight:700;width:66px;flex:none;font-variant-numeric:tabular-nums;}
   .ladder .step .lab{flex:1;font-size:.88rem;}
   .ladder .step .now{font-size:.72rem;font-weight:700;color:var(--accent);white-space:nowrap;}
+  .logline{display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--hair);font-size:.82rem;align-items:baseline;}
+  .logline:last-child{border-bottom:none;}
+  .logline .lt{font-family:var(--mono);font-size:.72rem;color:var(--faint);flex:none;}
+  .logline .lm{flex:1;white-space:pre-wrap;word-break:break-word;}
+  .logline.err{color:var(--sell);font-weight:600;}
+  .logline.warn{color:var(--accent);}
   .hint{font-size:.66rem;font-weight:700;padding:1px 7px;border-radius:5px;margin-left:6px;}
   .hint.long{background:var(--accent-soft);color:var(--accent);}
   .hint.short{background:color-mix(in srgb,var(--down) 15%,transparent);color:var(--down);}
@@ -165,6 +171,7 @@
     <button class="tab" data-tab="portfolio">포트폴리오</button>
     <button class="tab" data-tab="brain">AI 발굴·계획</button>
     <button class="tab" data-tab="trades">매매 내역</button>
+    <button class="tab" data-tab="logs">실행 로그</button>
     <button class="tab" data-tab="risk">리스크</button>
   </nav>
 
@@ -223,6 +230,14 @@
     <div class="card">
       <h2>체결 내역</h2>
       <div class="inner" id="trades"><div class="empty">불러오는 중…</div></div>
+    </div>
+  </section>
+
+  <!-- 실행 로그 -->
+  <section class="panel" id="tab-logs">
+    <div class="card">
+      <h2>자율 매매 실행 로그 <span id="log-count" style="color:var(--faint);font-weight:600;"></span></h2>
+      <div class="inner" id="logs"><div class="empty">불러오는 중…</div></div>
     </div>
   </section>
 
@@ -438,7 +453,17 @@ function render(s){
     tr.map(t=>`<tr><td>${esc(t.time)}</td><td><span class="tag ${t.side==="BUY"?"buy":"sell"}">${t.side==="BUY"?"매수":"매도"}</span></td>
       <td><span class="name">${esc(t.name)}</span><span class="code">${esc(t.code)}</span></td>
       <td class="num">${won(t.amount)}</td></tr>`).join("")+`</tbody></table>`
-    : `<div class="empty">아직 체결 내역이 없습니다<br><span style="font-size:.8em">Phase 2 자동 주문이 켜지면 여기에 쌓입니다</span></div>`;
+    : `<div class="empty">아직 체결 내역이 없습니다<br><span style="font-size:.8em">자동 주문이 실행되면 여기에 쌓입니다</span></div>`;
+
+  // 실행 로그
+  const logs = s.logs||[];
+  document.getElementById("log-count").textContent = logs.length?`${logs.length}건`:"";
+  const lgEl = document.getElementById("logs");
+  lgEl.innerHTML = logs.length ? logs.map(l=>{
+    const m=l.msg||"";
+    const cls = /❌|⛔|오류|실패/.test(m) ? "err" : /⚠️|🛡️/.test(m) ? "warn" : "";
+    return `<div class="logline ${cls}"><span class="lt">${esc(l.time)}</span><span class="lm">${esc(m)}</span></div>`;
+  }).join("") : `<div class="empty">아직 실행 로그가 없습니다<br><span style="font-size:.8em">트레이더가 실행되면 활동·오류가 여기 쌓입니다</span></div>`;
 
   // 리스크
   const rEl2 = document.getElementById("rules"), rules=s.rules||{};

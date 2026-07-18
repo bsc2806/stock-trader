@@ -28,6 +28,7 @@ WEB_DIR = ROOT / "web"
 STATE_PATH = ROOT / "data" / "state.json"
 TRADES_PATH = ROOT / "data" / "trades.json"
 POSITIONS_PATH = ROOT / "data" / "positions.json"
+LOG_PATH = ROOT / "data" / "trader_log.json"
 
 app = Flask(__name__)
 rm = risk.RiskManager()
@@ -180,6 +181,7 @@ def api_state():
         "dd_level": brain["dd_level"],
         "dd_pct": brain["dd_pct"],
         "trades": trades,
+        "logs": _read_json(LOG_PATH, []),
     })
 
 
