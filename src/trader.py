@@ -207,12 +207,11 @@ def run_cycle() -> None:
     equity2 = max(0, net2 - cash2)
     held = {h["code"] for h in holdings2}
 
-    slots = rm.slots_available(len(holdings2))
     budget = rm.buy_budget(net2, equity2, cash2)
-    per_max = rm.max_per_position(net2)
-    log(f"    편입가능 {slots}종목 · 매수예산 {budget:,}원 · 종목당 최대 {per_max:,}원")
+    slots = rm.affordable_slots(budget, len(holdings2))  # 계좌 금액에 자동 적응
+    log(f"    매수예산 {budget:,}원 · 편입가능 {slots}종목(예산 적응) · 순자산 {net2:,}원")
     if slots <= 0 or budget < rm.r["min_order_amount"]:
-        log("    여유 슬롯/예산 없음 — 매수 없음")
+        log("    예산 부족 — 매수 없음")
         return
 
     # AI 종목 선정은 결정 주기(config.AI_DECISION_INTERVAL_MIN)마다 1회만. 그 외엔 저장 계획 재사용.
@@ -231,7 +230,7 @@ def run_cycle() -> None:
         log("    신규 매수 없음 — 관망 (보유 중이거나 계획 소진)")
         return
 
-    each = min(per_max, budget // len(picks))
+    each = rm.size_each(budget, len(picks), net2)
     for p in picks:
         if each < rm.r["min_order_amount"]:
             continue
@@ -241,8 +240,12 @@ def run_cycle() -> None:
             continue
         if price <= 0:
             continue
+        if price < rm.r["min_share_price"]:  # 동전주·저가 부실주 차단
+            log(f"    · {p['name']}({p['code']}) {price:,}원 < 최저{rm.r['min_share_price']:,} — 건너뜀")
+            continue
         qty = each // price
-        if qty < 1:
+        if qty < 1:  # 주가가 종목당 예산보다 비싸 1주도 못 삼 → 건너뜀
+            log(f"    · {p['name']}({p['code']}) {price:,}원 > 종목당예산 {each:,} — 건너뜀")
             continue
         res = kis_client.place_order(p["code"], "BUY", qty, market=True)
         if res["ok"]:

@@ -112,9 +112,8 @@ def _refresh_brain() -> None:
 
     plan: list[dict] = []
     if net and level == "NORMAL":  # 낙폭 방어 단계면 신규 매수 계획 없음
-        slots = rm.slots_available(len(holdings))
         budget = rm.buy_budget(net, equity, cash)
-        per_max = rm.max_per_position(net)
+        slots = rm.affordable_slots(budget, len(holdings))  # 계좌 금액에 자동 적응
         if slots > 0 and budget >= rm.r["min_order_amount"]:
             # AI 호출은 결정 주기마다 1회만 + 정규장에만. 그 외엔 저장된 계획 재사용(무료).
             if market.is_open() and plan_store.is_due(config.AI_DECISION_INTERVAL_MIN):
@@ -133,7 +132,7 @@ def _refresh_brain() -> None:
                 picks = plan_store.read().get("picks", [])
             held_codes = {h["code"] for h in holdings}
             picks = [p for p in picks if p.get("code") not in held_codes][:slots]
-            each = min(per_max, budget // len(picks)) if picks else 0
+            each = rm.size_each(budget, len(picks), net) if picks else 0
             for p in picks:
                 if each >= rm.r["min_order_amount"]:
                     plan.append({**p, "amount": each})

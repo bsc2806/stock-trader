@@ -28,8 +28,9 @@ DEFAULT_RULES = {
     "dd_halt_buy_pct": -10.0,      # 계좌 낙폭 이 이하 → 신규 매수 중지
     "dd_trim_pct": -15.0,          # 계좌 낙폭 이 이하 → 손실 종목 절반 정리
     "dd_liquidate_pct": -25.0,     # 계좌 낙폭 이 이하 → 전량 청산
-    "max_positions": 6,            # 동시 보유 최대 종목 수
+    "max_positions": 6,            # 동시 보유 최대 종목 수(상한). 실제는 예산에 따라 자동 축소.
     "min_order_amount": 100000,    # 최소 주문 금액(원)
+    "min_share_price": 2000,       # 이 미만 주가는 매수 금지(동전주·저가 부실주 차단)
 }
 
 # 모의 전용 = 적극적/실험적 (다양하게 시도해 학습). 낙폭 방어는 조금 더 여유.
@@ -50,8 +51,9 @@ MOCK_RULES = {
     "dd_halt_buy_pct": -12.0,      # 신규 매수 중지
     "dd_trim_pct": -20.0,          # 손실 종목 절반 정리
     "dd_liquidate_pct": -30.0,     # 전량 청산 (진짜 붕괴에만)
-    "max_positions": 6,            # 종목 수 축소 (집중)
+    "max_positions": 6,            # 상한. 실제는 예산에 따라 자동 축소.
     "min_order_amount": 100000,
+    "min_share_price": 500,        # 모의는 저가주 실험 허용(진짜 동전주만 차단)
 }
 
 
@@ -139,8 +141,23 @@ class RiskManager:
         return int(net_asset * self.r["max_position_pct"] / 100)
 
     def slots_available(self, current_positions: int) -> int:
-        """추가로 편입 가능한 종목 수."""
+        """추가로 편입 가능한 종목 수 (상한)."""
         return max(0, self.r["max_positions"] - current_positions)
+
+    def affordable_slots(self, budget: int, current_positions: int) -> int:
+        """예산으로 감당 가능한 신규 편입 종목 수 = min(빈 슬롯, 예산/최소주문액).
+
+        계좌 금액에 자동 적응: 50만원이면 1~2종목, 1천만원이면 최대 종목수까지.
+        """
+        by_budget = int(budget // self.r["min_order_amount"])
+        return max(0, min(self.slots_available(current_positions), by_budget))
+
+    def size_each(self, budget: int, num_picks: int, net_asset: int) -> int:
+        """종목당 매수 금액. 소액이면 종목당%캡 대신 최소주문액까지 허용(그래야 체결됨)."""
+        if num_picks <= 0:
+            return 0
+        cap = max(self.max_per_position(net_asset), self.r["min_order_amount"])
+        return int(min(cap, budget // num_picks))
 
 
 if __name__ == "__main__":
