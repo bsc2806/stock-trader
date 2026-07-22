@@ -164,7 +164,8 @@ def get_balance() -> dict:
         "total_eval": int(o2.get("tot_evlu_amt", 0) or 0),
         "buy_amount": int(o2.get("pchs_amt_smtl_amt", 0) or 0),
         "pnl_amount": int(o2.get("evlu_pfls_smtl_amt", 0) or 0),
-        "cash": cash,
+        "cash": cash,                                            # D+2 정산 반영(실제 가용)
+        "cash_raw": int(o2.get("dnca_tot_amt", 0) or 0),         # 정산 전 원시 예수금
         "net_asset": int(o2.get("nass_amt", 0) or 0),
     }
     buy = summary["buy_amount"]

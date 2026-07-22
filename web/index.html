@@ -184,7 +184,7 @@
       <div class="bd">
         <div><div class="k">총 평가금액</div><div class="v" id="total-eval">—</div></div>
         <div><div class="k">매입 금액</div><div class="v" id="buy-amount">—</div></div>
-        <div><div class="k">예수금</div><div class="v" id="cash">—</div></div>
+        <div><div class="k">예수금 (정산반영)</div><div class="v" id="cash">—</div><div id="cash-raw" style="font-size:.7rem;color:var(--faint);font-weight:600;margin-top:3px;"></div></div>
       </div>
     </div>
     <div class="card">
@@ -410,6 +410,8 @@ function render(s){
   document.getElementById("total-eval").textContent = won(sum.total_eval);
   document.getElementById("buy-amount").textContent = won(sum.buy_amount);
   document.getElementById("cash").textContent = won(sum.cash);
+  const rawEl = document.getElementById("cash-raw");
+  rawEl.textContent = (sum.cash_raw != null && sum.cash_raw !== sum.cash) ? `정산 전 ${won(sum.cash_raw)}` : "";
 
   // 보유 종목 (손절/익절 판정 포함)
   const hEl = document.getElementById("holdings");
