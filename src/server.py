@@ -89,7 +89,7 @@ def _refresh_brain() -> None:
         net = s.get("net_asset") or s.get("total_eval") or 0
         cash = s.get("cash", 0)
         holdings = bal.get("holdings", [])
-        equity = max(0, net - cash)
+        equity = sum(h.get("eval_amt", 0) for h in holdings)  # 실제 보유 평가액(정산지연 무관)
         for h in holdings:
             pos = positions.get(h["code"], {})
             hz = pos.get("horizon")

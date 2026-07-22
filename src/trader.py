@@ -123,7 +123,7 @@ def run_cycle() -> None:
     net = s.get("net_asset") or s.get("total_eval") or 0
     cash = s.get("cash", 0)
     holdings = bal["holdings"]
-    equity = max(0, net - cash)
+    equity = sum(h.get("eval_amt", 0) for h in holdings)  # 실제 보유 평가액(예수금 정산지연 무관)
 
     # peak / 당일 시작 순자산 추적
     st = _read_json(STATE_PATH, {})
@@ -204,7 +204,7 @@ def run_cycle() -> None:
     net2 = s2.get("net_asset") or s2.get("total_eval") or 0
     cash2 = s2.get("cash", 0)
     holdings2 = bal2["holdings"]
-    equity2 = max(0, net2 - cash2)
+    equity2 = sum(h.get("eval_amt", 0) for h in holdings2)  # 실제 보유 평가액
     held = {h["code"] for h in holdings2}
 
     budget = rm.buy_budget(net2, equity2, cash2)
