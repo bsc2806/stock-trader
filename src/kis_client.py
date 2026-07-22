@@ -156,11 +156,15 @@ def get_balance() -> dict:
         })
 
     o2 = (data.get("output2") or [{}])[0]
+    # 예수금은 D+2 정산 반영액(가수도정산금액)을 사용. 매도대금이 D+2에 들어오므로
+    # 원시 예수금(dnca_tot_amt)은 정산 전이라 음수로 보일 수 있음 → 정산액이 실제 가용 현금.
+    settled = o2.get("prvs_rcdl_excc_amt")
+    cash = int(settled) if settled not in (None, "") else int(o2.get("dnca_tot_amt", 0) or 0)
     summary = {
         "total_eval": int(o2.get("tot_evlu_amt", 0) or 0),
         "buy_amount": int(o2.get("pchs_amt_smtl_amt", 0) or 0),
         "pnl_amount": int(o2.get("evlu_pfls_smtl_amt", 0) or 0),
-        "cash": int(o2.get("dnca_tot_amt", 0) or 0),
+        "cash": cash,
         "net_asset": int(o2.get("nass_amt", 0) or 0),
     }
     buy = summary["buy_amount"]
