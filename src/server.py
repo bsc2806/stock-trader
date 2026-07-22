@@ -112,7 +112,12 @@ def _refresh_brain() -> None:
 
     plan: list[dict] = []
     if net and level == "NORMAL":  # 낙폭 방어 단계면 신규 매수 계획 없음
-        budget = rm.buy_budget(net, equity, cash)
+        budget_cash = cash
+        try:
+            budget_cash = kis_client.get_orderable_cash()  # 미수 없는 정확한 주문가능금액
+        except Exception:
+            pass
+        budget = rm.buy_budget(net, equity, budget_cash)
         slots = rm.affordable_slots(budget, len(holdings))  # 계좌 금액에 자동 적응
         if slots > 0 and budget >= rm.r["min_order_amount"]:
             # AI 호출은 결정 주기마다 1회만 + 정규장에만. 그 외엔 저장된 계획 재사용(무료).

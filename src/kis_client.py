@@ -173,6 +173,29 @@ def get_balance() -> dict:
     return {"holdings": holdings, "summary": summary}
 
 
+def get_orderable_cash(ref_code: str = "005930") -> int:
+    """미수 없는 정확한 주문가능금액 조회 (매수가능조회 API).
+
+    예산 상한 기준으로 사용 → 초과매수·미수·주문거부 방지.
+    미수포함 최대금액(max_buy_amt)은 절대 쓰지 않음(빚 매수).
+    """
+    cano, prdt = _split_account()
+    tr_id = "VTTC8908R" if KIS_ENV == "vts" else "TTTC8908R"
+    url = f"{KIS_BASE_URL}/uapi/domestic-stock/v1/trading/inquire-psbl-order"
+    params = {
+        "CANO": cano,
+        "ACNT_PRDT_CD": prdt,
+        "PDNO": ref_code,          # 현금 조회는 종목 무관
+        "ORD_UNPR": "0",
+        "ORD_DVSN": "01",          # 시장가
+        "CMA_EVLU_AMT_ICLD_YN": "N",
+        "OVRS_ICLD_YN": "N",
+    }
+    resp = _get_with_retry(url, _headers(tr_id), params)
+    out = resp.json().get("output", {})
+    return int(out.get("nrcvb_buy_amt") or out.get("ord_psbl_cash") or 0)
+
+
 def _hashkey(body: dict) -> str:
     """주문 바디 위변조 방지용 해시키 발급."""
     url = f"{KIS_BASE_URL}/uapi/hashkey"

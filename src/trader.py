@@ -207,9 +207,13 @@ def run_cycle() -> None:
     equity2 = sum(h.get("eval_amt", 0) for h in holdings2)  # 실제 보유 평가액
     held = {h["code"] for h in holdings2}
 
-    budget = rm.buy_budget(net2, equity2, cash2)
+    try:
+        orderable = kis_client.get_orderable_cash()  # 미수 없는 정확한 주문가능금액
+    except Exception:
+        orderable = cash2  # 실패 시 정산예수금으로 대체
+    budget = rm.buy_budget(net2, equity2, orderable)
     slots = rm.affordable_slots(budget, len(holdings2))  # 계좌 금액에 자동 적응
-    log(f"    매수예산 {budget:,}원 · 편입가능 {slots}종목(예산 적응) · 순자산 {net2:,}원")
+    log(f"    매수예산 {budget:,}원(주문가능 {orderable:,}) · 편입가능 {slots}종목 · 순자산 {net2:,}원")
     if slots <= 0 or budget < rm.r["min_order_amount"]:
         log("    예산 부족 — 매수 없음")
         return
