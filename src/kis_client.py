@@ -160,13 +160,18 @@ def get_balance() -> dict:
     # 원시 예수금(dnca_tot_amt)은 정산 전이라 음수로 보일 수 있음 → 정산액이 실제 가용 현금.
     settled = o2.get("prvs_rcdl_excc_amt")
     cash = int(settled) if settled not in (None, "") else int(o2.get("dnca_tot_amt", 0) or 0)
+    # 순자산은 KIS nass_amt(정산지연 시 중복계산으로 튈 수 있음) 대신
+    # (정산현금 + 보유평가)로 직접 계산 → 낙폭 기준점 글리치 원천 방지
+    stock_eval = sum(h["eval_amt"] for h in holdings)
+    net_asset = cash + stock_eval
     summary = {
-        "total_eval": int(o2.get("tot_evlu_amt", 0) or 0),
+        "total_eval": net_asset,                                # 총 계좌가치(현금+주식)
+        "stock_eval": stock_eval,                               # 주식 평가액
         "buy_amount": int(o2.get("pchs_amt_smtl_amt", 0) or 0),
         "pnl_amount": int(o2.get("evlu_pfls_smtl_amt", 0) or 0),
         "cash": cash,                                            # D+2 정산 반영(실제 가용)
         "cash_raw": int(o2.get("dnca_tot_amt", 0) or 0),         # 정산 전 원시 예수금
-        "net_asset": int(o2.get("nass_amt", 0) or 0),
+        "net_asset": net_asset,
     }
     buy = summary["buy_amount"]
     summary["pnl_rate"] = round(summary["pnl_amount"] / buy * 100, 2) if buy else 0.0
