@@ -136,6 +136,11 @@ def run_cycle() -> None:
     _write_json(STATE_PATH, st)
     day_pnl_pct = (net - day_open) / day_open * 100 if day_open else 0.0
 
+    # 순자산이 비정상(0 이하)이면 조회 글리치 가능 → 이번 사이클 매매 보류(가짜 청산 방지)
+    if net <= 0:
+        log("    ⚠️ 순자산 조회 이상(0 이하) — 이번 사이클 매매 보류")
+        return
+
     # 계좌 낙폭 단계 판정 (단계적 방어)
     dd = rm.drawdown_pct(net, peak)
     level = rm.drawdown_level(net, peak)
@@ -149,7 +154,12 @@ def run_cycle() -> None:
 
     # ④ 보유 종목: peak 갱신 → 상장폐지 회피 → 손절/트레일링 익절 → (TRIM단계) 손실 절반 정리
     positions = _read_json(POSITIONS_PATH, {})
-    corp_map = dart_client.get_corp_map() if holdings else {}
+    corp_map = {}
+    if holdings:
+        try:
+            corp_map = dart_client.get_corp_map()
+        except Exception:
+            corp_map = {}  # DART 장애 시 상폐체크만 생략, 손절/트레일링은 계속 작동
     for h in holdings:
         code = h["code"]
         pos = positions.get(code, {})

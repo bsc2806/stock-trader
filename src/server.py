@@ -51,16 +51,10 @@ def _read_json(path: Path, default):
         return default
 
 
-def _update_peak(net: int) -> int:
-    """고점 순자산 추적(서킷브레이커용). data/state.json 에 저장."""
+def _peak(net: int) -> int:
+    """저장된 고점 조회(표시용). 파일 쓰기는 트레이더가 전담 — 서버는 읽기 전용(경합 방지)."""
     st = _read_json(STATE_PATH, {})
-    peak = max(int(st.get("peak_net", 0)), net)
-    st["peak_net"] = peak
-    try:
-        STATE_PATH.write_text(json.dumps(st), encoding="utf-8")
-    except Exception:
-        pass
-    return peak
+    return max(int(st.get("peak_net", 0)), net)
 
 
 def _fetch_balance() -> dict | None:
@@ -82,8 +76,7 @@ def _refresh_brain() -> None:
     net = cash = equity = 0
     holdings: list[dict] = []
     actions: list[dict] = []
-    positions = _read_json(POSITIONS_PATH, {})
-    pos_changed = False
+    positions = _read_json(POSITIONS_PATH, {})  # 읽기 전용(쓰기는 트레이더 전담)
     if bal:
         s = bal["summary"]
         net = s.get("net_asset") or s.get("total_eval") or 0
@@ -93,20 +86,11 @@ def _refresh_brain() -> None:
         for h in holdings:
             pos = positions.get(h["code"], {})
             hz = pos.get("horizon")
-            peak = max(float(pos.get("peak", 0.0)), h["pnl_rate"])  # 최고 수익률 갱신
-            if peak != pos.get("peak"):
-                pos["peak"] = peak
-                positions[h["code"]] = pos
-                pos_changed = True
+            peak = max(float(pos.get("peak", 0.0)), h["pnl_rate"])  # 표시용 최고 수익률(저장 안 함)
             actions.append({**h, "horizon": hz, "peak": round(peak, 2),
                             "action": rm.exit_decision(h["pnl_rate"], peak, hz)})
-    if pos_changed:
-        try:
-            POSITIONS_PATH.write_text(json.dumps(positions, ensure_ascii=False), encoding="utf-8")
-        except Exception:
-            pass
 
-    peak = _update_peak(net) if net else 0
+    peak = _peak(net) if net else 0
     dd_pct = round(rm.drawdown_pct(net, peak), 1) if net else 0.0
     level = rm.drawdown_level(net, peak) if net else "NORMAL"
 

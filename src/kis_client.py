@@ -30,9 +30,12 @@ def _get_access_token() -> str:
     KIS는 토큰 발급에 호출 제한이 있어 캐싱이 중요합니다.
     """
     if _TOKEN_PATH.exists():
-        cached = json.loads(_TOKEN_PATH.read_text(encoding="utf-8"))
-        if cached.get("expires_at", 0) > time.time() + 300:  # 5분 여유
-            return cached["access_token"]
+        try:
+            cached = json.loads(_TOKEN_PATH.read_text(encoding="utf-8"))
+            if cached.get("expires_at", 0) > time.time() + 300:  # 5분 여유
+                return cached["access_token"]
+        except Exception:
+            pass  # 캐시 손상/동시쓰기 → 아래에서 새로 발급
 
     url = f"{KIS_BASE_URL}/oauth2/tokenP"
     body = {
